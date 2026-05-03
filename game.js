@@ -25,7 +25,8 @@ const colors = {
 let player = {
     x: 50,
     y: 50,
-    color: colors.player
+    color: '#4CAF50', // Green for frog
+    size: 2 // 2x2 pixels for frog sprite
 };
 
 // Enemies
@@ -52,15 +53,26 @@ function generateSwamp() {
         }
     }
 
-    // Add some enemies
+    // Add some enemy frogs
     enemies = [];
     for (let i = 0; i < 10; i++) {
         let ex, ey;
         do {
-            ex = Math.floor(Math.random() * levelWidth);
-            ey = Math.floor(Math.random() * levelHeight);
-        } while (level[ey][ex] === 'tree' || level[ey][ex] === 'deepWater');
-        enemies.push({ x: ex, y: ey, color: colors.enemy });
+            ex = Math.floor(Math.random() * (levelWidth - 2)); // Leave space for 2x2 sprite
+            ey = Math.floor(Math.random() * (levelHeight - 2));
+            // Check if all 4 positions are valid
+            let valid = true;
+            for (let dy = 0; dy < 2; dy++) {
+                for (let dx = 0; dx < 2; dx++) {
+                    if (!isWalkable(ex + dx, ey + dy)) {
+                        valid = false;
+                        break;
+                    }
+                }
+                if (!valid) break;
+            }
+        } while (!valid);
+        enemies.push({ x: ex, y: ey, color: '#FF5722', size: 2 }); // Red enemy frogs
     }
 }
 
@@ -96,16 +108,32 @@ function drawLevel() {
         }
     }
 
-    // Draw enemies
+    // Draw enemies (enemy frogs)
     enemies.forEach(enemy => {
         if (enemy.x >= startX && enemy.x < endX && enemy.y >= startY && enemy.y < endY) {
-            drawPixel(enemy.x, enemy.y, enemy.color);
+            // Draw 2x2 enemy frog sprite
+            for (let dy = 0; dy < enemy.size; dy++) {
+                for (let dx = 0; dx < enemy.size; dx++) {
+                    drawPixel(enemy.x + dx, enemy.y + dy, enemy.color);
+                }
+            }
+            // Add eyes (yellow pixels for enemy frogs)
+            drawPixel(enemy.x, enemy.y, '#FFFF00');
+            drawPixel(enemy.x + 1, enemy.y, '#FFFF00');
         }
     });
 
-    // Draw player
+    // Draw player (frog sprite)
     if (player.x >= startX && player.x < endX && player.y >= startY && player.y < endY) {
-        drawPixel(player.x, player.y, player.color);
+        // Draw 2x2 frog sprite
+        for (let dy = 0; dy < player.size; dy++) {
+            for (let dx = 0; dx < player.size; dx++) {
+                drawPixel(player.x + dx, player.y + dy, player.color);
+            }
+        }
+        // Add eyes (white pixels)
+        drawPixel(player.x, player.y, '#FFFFFF');
+        drawPixel(player.x + 1, player.y, '#FFFFFF');
     }
 }
 
@@ -178,7 +206,19 @@ document.addEventListener('keydown', (e) => {
     else if (e.key === 'ArrowUp') newY--;
     else if (e.key === 'ArrowDown') newY++;
 
-    if (isWalkable(newX, newY)) {
+    // Check if all 4 pixels of the frog can move to the new position
+    let canMove = true;
+    for (let dy = 0; dy < player.size; dy++) {
+        for (let dx = 0; dx < player.size; dx++) {
+            if (!isWalkable(newX + dx, newY + dy)) {
+                canMove = false;
+                break;
+            }
+        }
+        if (!canMove) break;
+    }
+
+    if (canMove) {
         player.x = newX;
         player.y = newY;
     }
