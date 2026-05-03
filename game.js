@@ -26,11 +26,21 @@ let player = {
     x: 50,
     y: 50,
     color: '#4CAF50', // Green for frog
-    size: 2 // 2x2 pixels for frog sprite
+    size: 2, // 2x2 pixels for frog sprite
+    health: 100,
+    maxHealth: 100
 };
 
 // Enemies
 let enemies = [];
+
+// Projectiles
+let projectiles = [];
+
+// Game state
+let gameOver = false;
+let gameWon = false;
+let score = 0;
 
 // Generate swamp terrain
 function generateSwamp() {
@@ -72,7 +82,7 @@ function generateSwamp() {
                 if (!valid) break;
             }
         } while (!valid);
-        enemies.push({ x: ex, y: ey, color: '#FF5722', size: 2 }); // Red enemy frogs
+        enemies.push({ x: ex, y: ey, color: '#FF5722', size: 2, health: 50 }); // Red enemy frogs with health
     }
 }
 
@@ -123,18 +133,12 @@ function drawLevel() {
         }
     });
 
-    // Draw player (frog sprite)
-    if (player.x >= startX && player.x < endX && player.y >= startY && player.y < endY) {
-        // Draw 2x2 frog sprite
-        for (let dy = 0; dy < player.size; dy++) {
-            for (let dx = 0; dx < player.size; dx++) {
-                drawPixel(player.x + dx, player.y + dy, player.color);
-            }
+    // Draw projectiles
+    projectiles.forEach(proj => {
+        if (proj.x >= startX && proj.x < endX && proj.y >= startY && proj.y < endY) {
+            drawPixel(proj.x, proj.y, proj.color);
         }
-        // Add eyes (white pixels)
-        drawPixel(player.x, player.y, '#FFFFFF');
-        drawPixel(player.x + 1, player.y, '#FFFFFF');
-    }
+    });
 }
 
 // Add some fog effect
@@ -147,6 +151,38 @@ function drawFog() {
         ctx.beginPath();
         ctx.arc(x, y, size, 0, Math.PI * 2);
         ctx.fill();
+    }
+}
+
+// Draw UI (health, score, game over)
+function drawUI() {
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '16px monospace';
+    
+    // Health bar
+    ctx.fillText(`Health: ${player.health}/${player.maxHealth}`, 10, 20);
+    
+    // Score
+    ctx.fillText(`Score: ${score}`, 10, 40);
+    
+    // Game over/win messages
+    if (gameOver) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#FF0000';
+        ctx.font = '32px monospace';
+        ctx.fillText('GAME OVER', canvas.width/2 - 100, canvas.height/2);
+        ctx.font = '16px monospace';
+        ctx.fillText('Press R to restart', canvas.width/2 - 60, canvas.height/2 + 30);
+    } else if (gameWon) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#00FF00';
+        ctx.font = '32px monospace';
+        ctx.fillText('YOU WIN!', canvas.width/2 - 80, canvas.height/2);
+        ctx.font = '16px monospace';
+        ctx.fillText(`Final Score: ${score}`, canvas.width/2 - 50, canvas.height/2 + 30);
+        ctx.fillText('Press R to restart', canvas.width/2 - 60, canvas.height/2 + 50);
     }
 }
 
@@ -181,13 +217,109 @@ function isWalkable(x, y) {
     return tile !== 'tree' && tile !== 'deepWater';
 }
 
+// Create projectile
+function shootProjectile(x, y, dx, dy, color = '#FFFF00') {
+    projectiles.push({
+        x: x,
+        y: y,
+        dx: dx,
+        dy: dy,
+        color: color,
+        size: 1
+    });
+}
+
+// Update projectiles
+function updateProjectiles() {
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        const proj = projectiles[i];
+        proj.x += proj.dx;
+        proj.y += proj.dy;
+
+        // Remove if out of bounds
+        if (proj.x < 0 || proj.x >= levelWidth || proj.y < 0 || proj.y >= levelHeight) {
+            projectiles.splice(i, 1);
+            continue;
+        }
+
+        // Check collision with enemies
+        for (let j = enemies.length - 1; j >= 0; j--) {
+            const enemy = enemies[j];
+            if (Math.abs(proj.x - enemy.x) < enemy.size && Math.abs(proj.y - enemy.y) < enemy.size) {
+                enemy.health -= 25; // Damage enemy
+                projectiles.splice(i, 1);
+                if (enemy.health <= 0) {
+                    enemies.splice(j, 1);
+                    score += 100;
+                }
+                break;
+            }
+        }
+    }
+}
+
+// Update enemies (simple AI - move towards player)
+function updateEnemies() {
+    enemies.forEach(enemy => {
+        // Simple AI: move towards player occasionally
+        if (Math.random() < 0.02) { // 2% chance per frame to move
+            let dx = player.x - enemy.x;
+            let dy = player.y - enemy.y;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist > 0) {
+                dx /= dist; // Normalize
+                dy /= dist;
+                
+                let newX = enemy.x + Math.sign(dx);
+                let newY = enemy.y + Math.sign(dy);
+                
+                // Check if new position is valid
+                let canMove = true;
+                for (let dy2 = 0; dy2 < enemy.size; dy2++) {
+                    for (let dx2 = 0; dx2 < enemy.size; dx2++) {
+                        if (!isWalkable(newX + dx2, newY + dy2)) {
+                            canMove = false;
+                            break;
+                        }
+                    }
+                    if (!canMove) break;
+                }
+                
+                if (canMove) {
+                    enemy.x = newX;
+                    enemy.y = newY;
+                }
+            }
+        }
+
+        // Check collision with player
+        if (Math.abs(enemy.x - player.x) < enemy.size && Math.abs(enemy.y - player.y) < enemy.size) {
+            player.health -= 1; // Damage player over time when touching
+        }
+    });
+}
+
 // Game loop
 function gameLoop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    updateCamera();
+    if (!gameOver && !gameWon) {
+        updateCamera();
+        updateProjectiles();
+        updateEnemies();
+        
+        // Check win/lose conditions
+        if (player.health <= 0) {
+            gameOver = true;
+        } else if (enemies.length === 0) {
+            gameWon = true;
+        }
+    }
+
     drawLevel();
     drawFog();
+    drawUI();
 
     requestAnimationFrame(gameLoop);
 }
@@ -196,8 +328,21 @@ function gameLoop() {
 generateSwamp();
 gameLoop();
 
-// Player movement with arrow keys
+// Player movement with arrow keys and shooting with space
 document.addEventListener('keydown', (e) => {
+    if (gameOver || gameWon) {
+        if (e.key === 'r' || e.key === 'R') {
+            // Restart game
+            player.health = player.maxHealth;
+            score = 0;
+            gameOver = false;
+            gameWon = false;
+            projectiles = [];
+            generateSwamp();
+        }
+        return;
+    }
+
     let newX = player.x;
     let newY = player.y;
 
@@ -205,6 +350,35 @@ document.addEventListener('keydown', (e) => {
     else if (e.key === 'ArrowRight') newX++;
     else if (e.key === 'ArrowUp') newY--;
     else if (e.key === 'ArrowDown') newY++;
+    else if (e.key === ' ') { // Space bar to shoot
+        // Shoot in the direction of last movement or towards nearest enemy
+        let targetX = player.x + 1; // Default right
+        let targetY = player.y;
+        
+        // Find nearest enemy
+        let nearestDist = Infinity;
+        let nearestEnemy = null;
+        enemies.forEach(enemy => {
+            const dist = Math.sqrt((enemy.x - player.x) ** 2 + (enemy.y - player.y) ** 2);
+            if (dist < nearestDist) {
+                nearestDist = dist;
+                nearestEnemy = enemy;
+            }
+        });
+        
+        if (nearestEnemy) {
+            targetX = nearestEnemy.x;
+            targetY = nearestEnemy.y;
+        }
+        
+        const dx = targetX - player.x;
+        const dy = targetY - player.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 0) {
+            shootProjectile(player.x + 1, player.y + 1, dx/dist * 3, dy/dist * 3);
+        }
+        return; // Don't move when shooting
+    }
 
     // Check if all 4 pixels of the frog can move to the new position
     let canMove = true;
